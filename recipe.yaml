@@ -1,37 +1,40 @@
 context:
   name: pytorch
-  version: nightly
   rev: main
+  version: nightly
   python: 3.12
   gcc: 13.3
   cuda: 12.8
   cudnn: 9.8
-  archs: 8.6;9.0;10.0;12.0;12.6
+  archs: 8.6;9.0;10.0;12.0
 
 package:
   name: ${{name|lower}}
   version: ${{version}}
 
 source:
-  git: https://github.com/pytorch/pytorch.git
+  git: https://github.com/pytorch/pytorch
   rev: ${{rev}}
 
 build:
   script:
     env:
       USE_CUDA: 1
+      USE_MAGMA: 1
+      USE_SYSTEM_NCCL: 1
+      CONDA_PREFIX: $PREFIX
+      BUILD_CUSTOM_PROTOBUF: 0
       TORCH_CUDA_ARCH_LIST: "${{archs}}"
-      CUDA_HOME: "$PREFIX:$PREFIX/targets/x86_64-linux"
-      CUDA_TOOLKIT_ROOT_DIR: "$PREFIX:$PREFIX/targets/x86_64-linux"
+      NCCL_ROOT: $PREFIX:$PREFIX/targets/x86_64-linux:$NCCL_ROOT
+      CUDA_PATH: $PREFIX:$PREFIX/targets/x86_64-linux:$CUDA_PATH
+      CUDA_HOME: $PREFIX:$PREFIX/targets/x86_64-linux:$CUDA_HOME
+      CUDA_BIN_PATH: $PREFIX:$PREFIX/targets/x86_64-linux:$CUDA_BIN_PATH
+      CUDA_TOOLKIT_ROOT: $PREFIX:$PREFIX/targets/x86_64-linux:$CUDA_TOOLKIT_ROOT
     content: |
       > third_party/NNPACK/cmake/DownloadSix.cmake
-      .ci/docker/common/install_magma_conda.sh ${{cuda}}
-      $PYTHON setup.py develop \
-      --single-version-externally-managed \
-      --record=record.txt \
-      --prefix="$PREFIX"
-
-    
+      bash .ci/docker/common/install_magma_conda.sh "${{cuda}}"
+      $PYTHON setup.py install \
+        --prefix=$PREFIX
 
 requirements:
   build:
@@ -44,21 +47,30 @@ requirements:
   host:
     - python=3.12
     - setuptools
+    - pip
     - six
-    - cmake
-    - numpy
+    - curl
+    - pybind11
+    - cmake<4.0
     - pyyaml
+    - protobuf
     - typing-extensions
     - nccl
-    - cudnn
+    - eigen
+    - sleef
+    - onednn
+    - sccache
+    - numpy>2.0
+    - libabseil
+    - libcudss-dev
+    - cusparselt-dev
+    - cudnn=${{cudnn}}
+    - cuda-cccl=${{cuda}}
+    - cuda-nvcc=${{cuda}}
+    - cuda-nvtx=${{cuda}}
+    - cuda-nvrtc=${{cuda}}
     - cuda-toolkit=${{cuda}}
     - cuda-compiler=${{cuda}}
-    - cuda-nvcc=${{cuda}}
-    - libabseil
-    - libprotobuf
-    - sleef
-    - pybind11
-    - eigen
   run:
     - python=3.12
     - mkl
@@ -68,12 +80,7 @@ requirements:
     - typing-extensions
     - cudnn=${{cudnn}}
     - cuda-toolkit=${{cuda}}
-    - cuda-driver-dev=${{cuda}}
 
 tests:
   - script:
-    - python -c "
-        import torch;
-        print("is_available:", torch.cuda.is_available());
-        print("Device name:", torch.cuda.get_device_name(0));
-      "
+    - python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0));"
